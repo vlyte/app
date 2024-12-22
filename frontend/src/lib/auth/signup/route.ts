@@ -1,41 +1,30 @@
-// @ts-nocheck
+import { MongoClient } from 'mongodb';
+import bcrypt from 'bcrypt';
 
-import { NextResponse } from 'next/server'
-import bcrypt from 'bcryptjs'
-import clientPromise from '@/lib/mongodb'
-import { z } from 'zod'
+const uri = 'mongodb+srv://vlytedev:<db_password>@vlyte.y0mpp.mongodb.net/?retryWrites=true&w=majority&appName=Vlyte';
+const client = new MongoClient(uri);
+const dbName = 'Vlyte';
+const collectionName = 'users';
 
-const signupSchema = z.object({
-  name: z.string().min(2),
-  email: z.string().email(),
-  password: z.string().min(6),
-})
+export async function signup(email: string, password: string) {
+    try {
+        await client.connect();
+        const db = client.db(dbName);
+        const collection = db.collection(collectionName);
 
-export async function POST(req: Request) {
-  try {
-    const body = await req.json()
-    const { name, email, password } = signupSchema.parse(body)
+        const existingUser = await collection.findOne({ email });
+        if (existingUser) {
+            throw new Error('User already exists');
+        }
 
-    const client = await clientPromise
-    const db = client.db('auth_app')
+        const hashedPassword = await bcrypt.hash(password, 10);
+        await collection.insertOne({ email, password: hashedPassword });
 
-    const existingUser = await db.collection('users').findOne({ email })
-    if (existingUser) {
-      return NextResponse.json({ error: 'User already exists' }, { status: 400 })
+        return { success: true };
+    } catch (error) {
+        console.error('Error signing up:', error);
+        return { success: false, error: error.message };
+    } finally {
+        await client.close();
     }
-
-    const hashedPassword = await bcrypt.hash(password, 10)
-    const result = await db.collection('users').insertOne({
-      name,
-      email,
-      password: hashedPassword,
-    })
-
-    return NextResponse.json({ message: 'User created successfully', userId: result.insertedId }, { status: 201 })
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors }, { status: 400 })
-    }
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
-  }
 }

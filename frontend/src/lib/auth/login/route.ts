@@ -1,45 +1,32 @@
-// @ts-nocheck 
+import { MongoClient } from 'mongodb';
+import bcrypt from 'bcrypt';
 
-import { NextResponse } from 'next/server'
-import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
-import clientPromise from '@/lib/mongodb'
-import { z } from 'zod'
+const uri = 'mongodb+srv://vlytedev:<db_password>@vlyte.y0mpp.mongodb.net/?retryWrites=true&w=majority&appName=Vlyte';
+const client = new MongoClient(uri);
+const dbName = 'Vlyte';
+const collectionName = 'users';
 
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string(),
-})
+export async function login(email: string, password: string) {
+    try {
+        await client.connect();
+        const db = client.db(dbName);
+        const collection = db.collection(collectionName);
 
-export async function POST(req: Request) {
-  try {
-    const body = await req.json()
-    const { email, password } = loginSchema.parse(body)
+        const user = await collection.findOne({ email });
+        if (!user) {
+            throw new Error('User not found');
+        }
 
-    const client = await clientPromise
-    const db = client.db('auth_app')
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) {
+            throw new Error('Invalid password');
+        }
 
-    const user = await db.collection('users').findOne({ email })
-    if (!user) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+        return { success: true, user };
+    } catch (error) {
+        console.error('Error logging in:', error);
+        return { success: false, error: error.message };
+    } finally {
+        await client.close();
     }
-
-    const passwordMatch = await bcrypt.compare(password, user.password)
-    if (!passwordMatch) {
-      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
-    }
-
-    const token = jwt.sign(
-      { userId: user._id, name: user.name, email: user.email },
-      process.env.JWT_SECRET!,
-      { expiresIn: '1h' }
-    )
-
-    return NextResponse.json({ token, user: { id: user._id, name: user.name, email: user.email } })
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors }, { status: 400 })
-    }
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
-  }
 }

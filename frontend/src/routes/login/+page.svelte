@@ -7,15 +7,28 @@
     let email = '';
     let password = '';
     let error = '';
+    let success = '';
 
-    const handleSubmit = (event) => {
+    const handleSubmit = async (event) => {
         event.preventDefault();
-        // Handle form submission logic here
         if (!email || !password) {
             error = 'Email and password are required';
         } else {
             error = '';
-            // Perform login logic
+            const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            const result = await response.json();
+            if (!result.success) {
+                error = result.error;
+            } else {
+                success = 'Logged in successfully!';
+                setTimeout(() => {
+                    window.location.href = '/dashboard';
+                }, 2000);
+            }
         }
     };
 </script>
@@ -51,6 +64,11 @@
             {#if error}
                 <Alert variant="destructive">
                     <AlertDescription>{error}</AlertDescription>
+                </Alert>
+            {/if}
+            {#if success}
+                <Alert variant="success">
+                    <AlertDescription class="text-green-500">{success}</AlertDescription>
                 </Alert>
             {/if}
             <Button type="submit" class="w-full">
